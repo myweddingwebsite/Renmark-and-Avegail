@@ -936,9 +936,9 @@
 </button>
 
 <script>
-  // ---- Background music: plain <audio> tag, no iframe / no external API ----
+  // ---- Background music: plain <audio> tag, tap-to-play only (no autoplay) ----
   var bgMusic = document.getElementById('bgMusic');
-  var musicOn = false, audioUnlocked = false;
+  var musicOn = false;
 
   function updateButtonUI(){
     var btn = document.getElementById('music-toggle');
@@ -948,7 +948,7 @@
   function playMusic(){
     if(!bgMusic) return;
     var p = bgMusic.play();
-    if(p && p.catch){ p.catch(function(){ /* blocked until user interacts — unlock() below handles it */ }); }
+    if(p && p.catch){ p.catch(function(){}); }
     musicOn = true;
     updateButtonUI();
   }
@@ -962,7 +962,6 @@
 
   function toggleMusic(evt){
     if(evt && evt.stopPropagation) evt.stopPropagation();
-    audioUnlocked = true;
     if(musicOn){ pauseMusic(); } else { playMusic(); }
   }
 
@@ -970,24 +969,7 @@
     var btn = document.getElementById('music-toggle');
     if(btn){ btn.addEventListener('click', toggleMusic); }
     if(bgMusic){ bgMusic.volume = 0.5; }
-
-    // Try to autoplay immediately.
-    playMusic();
-
-    // Browsers block audio-with-sound autoplay until the visitor interacts with the
-    // page at least once. If the attempt above was silently blocked, this catches
-    // their first tap/click/scroll and starts the music right then.
-    var unlock = function(){
-      if(audioUnlocked) return;
-      audioUnlocked = true;
-      if(bgMusic && bgMusic.paused){ playMusic(); }
-      document.removeEventListener('click', unlock);
-      document.removeEventListener('touchstart', unlock);
-      document.removeEventListener('scroll', unlock);
-    };
-    document.addEventListener('click', unlock, { once:true });
-    document.addEventListener('touchstart', unlock, { once:true });
-    document.addEventListener('scroll', unlock, { once:true });
+    // No autoplay — music starts only when the visitor taps the button above.
   });
 </script>
 
