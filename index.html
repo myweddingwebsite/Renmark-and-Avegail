@@ -506,6 +506,48 @@
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important;}
   }
+
+  /* ---------- Background Music Toggle ---------- */
+  #yt-player-wrap{
+    position:fixed; bottom:0; right:0;
+    width:1px; height:1px;
+    overflow:hidden;
+    opacity:0;
+    pointer-events:none;
+  }
+  .music-toggle{
+    position:fixed;
+    bottom:24px;
+    right:24px;
+    z-index:999;
+    width:56px;
+    height:56px;
+    border-radius:50%;
+    background:var(--cream);
+    border:1px solid var(--olive-deep);
+    box-shadow:var(--shadow);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    transition:background .35s ease, transform .35s ease;
+  }
+  .music-toggle:hover{ transform:translateY(-2px); }
+  .music-toggle.playing{
+    background:var(--olive-deep);
+    box-shadow:0 0 0 6px rgba(240,194,75,0.22), var(--shadow);
+  }
+  .music-toggle svg{width:20px; height:20px; color:var(--olive-deep); transition:color .35s ease;}
+  .music-toggle.playing svg{color:var(--champagne);}
+  .music-toggle #music-icon-off{display:none;}
+  .music-toggle.playing #music-icon-on{display:block;}
+  .music-toggle.playing #music-icon-off{display:none;}
+  .music-toggle:not(.playing) #music-icon-on{display:none;}
+  .music-toggle:not(.playing) #music-icon-off{display:block;}
+  @media(max-width:480px){
+    .music-toggle{width:48px; height:48px; bottom:18px; right:18px;}
+    .music-toggle svg{width:17px; height:17px;}
+  }
 </style>
 </head>
 <body>
@@ -881,5 +923,112 @@
     reveals.forEach(function(el){ el.classList.add('in'); });
   }
 </script>
+<!-- ================= BACKGROUND MUSIC ================= -->
+<div id="yt-player-wrap"><div id="yt-player"></div></div>
+
+<button id="music-toggle" class="music-toggle" type="button" aria-label="Toggle wedding music" title="Toggle music">
+  <svg id="music-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 18V5l10-2v13"/>
+    <circle cx="6" cy="18" r="3"/>
+    <circle cx="16" cy="16" r="3"/>
+  </svg>
+  <svg id="music-icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 18V5l10-2v13"/>
+    <circle cx="6" cy="18" r="3"/>
+    <circle cx="16" cy="16" r="3"/>
+    <line x1="3" y1="3" x2="21" y2="21"/>
+  </svg>
+</button>
+
+<script>
+  // ---- Background music: YouTube IFrame API, hidden player, toggle button ----
+  var ytPlayer, ytReady = false, wantsPlaying = false, audioUnlocked = false;
+
+  function loadYouTubeAPI(){
+    var tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    var firstTag = document.getElementsByTagName('script')[0];
+    firstTag.parentNode.insertBefore(tag, firstTag);
+  }
+
+  window.onYouTubeIframeAPIReady = function(){
+    ytPlayer = new YT.Player('yt-player', {
+      videoId: 'nNJkh92SwUk',
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        loop: 1,
+        playlist: 'nNJkh92SwUk',
+        playsinline: 1,
+        mute: 1,
+        modestbranding: 1,
+        rel: 0
+      },
+      events: {
+        onReady: function(e){
+          ytReady = true;
+          e.target.setVolume(50);
+          e.target.playVideo();
+          // Most browsers only allow autoplay when muted. Try to unmute right away;
+          // if the browser blocks it, sound will start on the visitor's first tap/click.
+          try{ e.target.unMute(); }catch(err){}
+          syncButtonState();
+        },
+        onStateChange: function(e){
+          syncButtonState();
+        }
+      }
+    });
+  };
+
+  function syncButtonState(){
+    var btn = document.getElementById('music-toggle');
+    if(!btn || !ytPlayer || !ytPlayer.getPlayerState) return;
+    var playing = ytPlayer.getPlayerState() === 1;
+    var muted = ytPlayer.isMuted ? ytPlayer.isMuted() : true;
+    btn.classList.toggle('playing', playing && !muted);
+  }
+
+  function toggleMusic(evt){
+    if(evt && evt.stopPropagation) evt.stopPropagation();
+    if(!ytPlayer || !ytReady) return;
+    var muted = ytPlayer.isMuted ? ytPlayer.isMuted() : true;
+    var playing = ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1;
+    if(!playing || muted){
+      ytPlayer.unMute();
+      ytPlayer.setVolume(50);
+      ytPlayer.playVideo();
+      wantsPlaying = true;
+    } else {
+      ytPlayer.mute();
+      wantsPlaying = false;
+    }
+    audioUnlocked = true;
+    setTimeout(syncButtonState, 200);
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    loadYouTubeAPI();
+    var btn = document.getElementById('music-toggle');
+    if(btn){ btn.addEventListener('click', toggleMusic); }
+
+    // If autoplay-with-sound was blocked, unlock audio on the visitor's first interaction.
+    var unlock = function(){
+      if(audioUnlocked) return;
+      if(ytPlayer && ytReady){
+        var muted = ytPlayer.isMuted ? ytPlayer.isMuted() : true;
+        if(muted){ ytPlayer.unMute(); ytPlayer.setVolume(50); ytPlayer.playVideo(); syncButtonState(); }
+        audioUnlocked = true;
+      }
+      document.removeEventListener('click', unlock);
+      document.removeEventListener('touchstart', unlock);
+      document.removeEventListener('scroll', unlock);
+    };
+    document.addEventListener('click', unlock, { once:true });
+    document.addEventListener('touchstart', unlock, { once:true });
+    document.addEventListener('scroll', unlock, { once:true });
+  });
+</script>
+
 </body>
 </html>
