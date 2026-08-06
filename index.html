@@ -937,7 +937,7 @@
      pointer-events:none and 2x2px, so nothing inside it can ever be clicked or seen. -->
 <div id="yt-player-wrap">
   <iframe id="bg-music-frame"
-    src="https://www.youtube-nocookie.com/embed/nNJkh92SwUk?autoplay=1&mute=1&loop=1&playlist=nNJkh92SwUk&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&iv_load_policy=3&enablejsapi=1&playsinline=1&origin=."
+    src="https://www.youtube-nocookie.com/embed/nNJkh92SwUk?autoplay=1&mute=1&loop=1&playlist=nNJkh92SwUk&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&iv_load_policy=3&enablejsapi=1&playsinline=1"
     allow="autoplay"
     sandbox="allow-scripts allow-same-origin"
     tabindex="-1"
@@ -972,6 +972,16 @@
     }catch(err){}
   }
 
+  // The embedded player can take a moment to finish initializing after the iframe
+  // loads. A command sent too early is silently dropped, so retry it a few times
+  // over ~2.5s rather than relying on a single postMessage getting through.
+  function repeatCommand(funcs, triesLeft){
+    funcs.forEach(sendCommand);
+    if(triesLeft > 0){
+      setTimeout(function(){ repeatCommand(funcs, triesLeft - 1); }, 400);
+    }
+  }
+
   function updateButtonUI(){
     var btn = document.getElementById('music-toggle');
     if(btn){ btn.classList.toggle('playing', musicOn); }
@@ -980,13 +990,10 @@
   function toggleMusic(evt){
     if(evt && evt.stopPropagation) evt.stopPropagation();
     if(musicOn){
-      sendCommand('mute');
-      sendCommand('pauseVideo');
+      repeatCommand(['mute', 'pauseVideo'], 6);
       musicOn = false;
     } else {
-      sendCommand('unMute');
-      sendCommand('setVolume'); // no-op without args; volume stays at default
-      sendCommand('playVideo');
+      repeatCommand(['unMute', 'playVideo'], 6);
       musicOn = true;
     }
     audioUnlocked = true;
@@ -1001,8 +1008,7 @@
     // interacts with the page at least once). Unlock sound on their first tap/click/scroll.
     var unlock = function(){
       if(audioUnlocked) return;
-      sendCommand('unMute');
-      sendCommand('playVideo');
+      repeatCommand(['unMute', 'playVideo'], 6);
       musicOn = true;
       audioUnlocked = true;
       updateButtonUI();
