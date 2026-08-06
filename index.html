@@ -932,19 +932,10 @@
   }
 </script>
 <!-- ================= BACKGROUND MUSIC ================= -->
-<!-- Sandboxed on purpose: no allow-popups / allow-top-navigation, so this embed can
-     never redirect or open the page away, no matter what happens inside it. It is also
-     pointer-events:none and 2x2px, so nothing inside it can ever be clicked or seen. -->
-<div id="yt-player-wrap">
-  <iframe id="bg-music-frame"
-    src="https://www.youtube-nocookie.com/embed/lY5V4hSLWY8?autoplay=1&mute=1&loop=1&playlist=lY5V4hSLWY8&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&iv_load_policy=3&enablejsapi=1&playsinline=1"
-    allow="autoplay"
-    sandbox="allow-scripts allow-same-origin"
-    tabindex="-1"
-    aria-hidden="true"
-    title="Background music (audio only)">
-  </iframe>
-</div>
+<!-- Sandboxed on purpose: no allow-popups / allow-top-navigation, so this can never
+     redirect or open the page away. It is also pointer-events:none and 2x2px, so
+     nothing inside it is ever visible or clickable. -->
+<div id="yt-player-wrap"></div>
 
 <button id="music-toggle" class="music-toggle" type="button" aria-label="Toggle wedding music" title="Toggle music">
   <svg id="music-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -961,25 +952,33 @@
 </button>
 
 <script>
-  // ---- Background music: plain sandboxed iframe + postMessage, no external API script ----
-  var musicOn = false, audioUnlocked = false;
+  // ---- Background music: rebuild the embed's src at the moment of a real user
+  // gesture (click/tap/scroll), instead of remote-controlling an already-loaded
+  // player. Browsers reliably allow unmuted autoplay when it happens inside a
+  // genuine interaction handler like this — no API, no postMessage, no origin checks.
+  var YT_VIDEO_ID = 'nNJkh92SwUk';
+  var musicOn = false;
 
-  function sendCommand(func){
-    var frame = document.getElementById('bg-music-frame');
-    if(!frame || !frame.contentWindow) return;
-    try{
-      frame.contentWindow.postMessage(JSON.stringify({ event:'command', func: func, args:[] }), '*');
-    }catch(err){}
+  function ytSrc(muted){
+    return 'https://www.youtube-nocookie.com/embed/' + YT_VIDEO_ID +
+      '?autoplay=1&mute=' + (muted ? 1 : 0) +
+      '&loop=1&playlist=' + YT_VIDEO_ID +
+      '&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&iv_load_policy=3&playsinline=1';
   }
 
-  // The embedded player can take a moment to finish initializing after the iframe
-  // loads. A command sent too early is silently dropped, so retry it a few times
-  // over ~2.5s rather than relying on a single postMessage getting through.
-  function repeatCommand(funcs, triesLeft){
-    funcs.forEach(sendCommand);
-    if(triesLeft > 0){
-      setTimeout(function(){ repeatCommand(funcs, triesLeft - 1); }, 400);
-    }
+  function buildFrame(muted){
+    var wrap = document.getElementById('yt-player-wrap');
+    if(!wrap) return;
+    wrap.innerHTML = '';
+    var frame = document.createElement('iframe');
+    frame.id = 'bg-music-frame';
+    frame.src = ytSrc(muted);
+    frame.setAttribute('allow', 'autoplay');
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    frame.setAttribute('tabindex', '-1');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.title = 'Background music (audio only)';
+    wrap.appendChild(frame);
   }
 
   function updateButtonUI(){
@@ -987,31 +986,36 @@
     if(btn){ btn.classList.toggle('playing', musicOn); }
   }
 
+  function turnMusicOn(){
+    buildFrame(false); // rebuilt right here, inside a user-gesture handler = sound allowed
+    musicOn = true;
+    updateButtonUI();
+  }
+
+  function turnMusicOff(){
+    buildFrame(true);
+    musicOn = false;
+    updateButtonUI();
+  }
+
   function toggleMusic(evt){
     if(evt && evt.stopPropagation) evt.stopPropagation();
-    if(musicOn){
-      repeatCommand(['mute', 'pauseVideo'], 6);
-      musicOn = false;
-    } else {
-      repeatCommand(['unMute', 'playVideo'], 6);
-      musicOn = true;
-    }
-    audioUnlocked = true;
-    updateButtonUI();
+    if(musicOn){ turnMusicOff(); } else { turnMusicOn(); }
   }
 
   document.addEventListener('DOMContentLoaded', function(){
     var btn = document.getElementById('music-toggle');
     if(btn){ btn.addEventListener('click', toggleMusic); }
 
-    // The embed starts muted (browsers block autoplay-with-sound until the visitor
-    // interacts with the page at least once). Unlock sound on their first tap/click/scroll.
+    // Start muted immediately — muted autoplay is always allowed, so the player
+    // is loaded and ready to go the instant the visitor interacts with the page.
+    buildFrame(true);
+
+    var unlocked = false;
     var unlock = function(){
-      if(audioUnlocked) return;
-      repeatCommand(['unMute', 'playVideo'], 6);
-      musicOn = true;
-      audioUnlocked = true;
-      updateButtonUI();
+      if(unlocked) return;
+      unlocked = true;
+      turnMusicOn();
       document.removeEventListener('click', unlock);
       document.removeEventListener('touchstart', unlock);
       document.removeEventListener('scroll', unlock);
